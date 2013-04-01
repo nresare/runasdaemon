@@ -1,0 +1,35 @@
+runasdaemon - A small tool to make command line programs behave as unix daemons
+
+People running unix like systems expect daemon processes behave in certain
+ways. A proper daemon is expected to detach from the terminal or script from
+which it was started. It is expected to write it's output to syslog and it is
+expected to shut down gracefully when receiving the TERM signal.
+
+Software developers, on the other hand, sometimes write software that fails to
+meet those expectations. Unfortunately some software environments, such as
+java, is missing critical functionality to make daemons behave the unix way.
+
+One example of this, the initial use case of this project, is the minecraft
+server. It is distributed as a jar file and when started it doesn't detach
+from the controlling terminal. Logging is written to standard out and there
+doesn't seem to be any signal handlers installed.
+
+This projects provides a program, runasdaemon, that is used to control another
+program. It does a double fork, detaching from the controlling terminal, any
+output from the child program is redirected to syslog.
+
+Dependencies
+------------
+
+There are no runtime dependencies besides a non-ancient python 2 environment.
+It has been developed with python 2.6.6. The tests are written to be run with
+nosetest.
+
+
+License
+-------
+
+runasdaemon is free software. This code is released under the Apache Software
+License, version 2. Details can be found in the file LICENSE
+
+All code is Copyright (c) 2013 Noa Resare

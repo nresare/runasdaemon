@@ -1,0 +1,85 @@
+#!/usr/bin/python
+# Copyright 2013 (c) Noa Resare
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+from __future__ import print_function
+import sys
+import argparse
+import os
+import traceback
+from runasdaemon import childrunner, process
+
+
+def parent_part(command, pid_file, socket_path):
+    """
+    The part of the setup that is run in the calling (parent) process
+    """
+    read_pipe, write_pipe = os.pipe()
+
+    def child_part():
+        if os.path.exists(socket_path):
+            os.unlink(socket_path)
+        # noinspection PyBroadException
+        try:
+            runner = childrunner.ChildRunner(command, socket_path,
+                                             parent_fd=write_pipe)
+            runner.select()
+        except Exception, e:
+            os.write(write_pipe, "1\n%s" % traceback.format_exc())
+
+    process.double_fork(child_part, pid_file)
+    # all write endpoints of the pipe needs to be closed for a read to return
+    # empty buf
+    os.close(write_pipe)
+    buf = os.read(read_pipe, 1024)
+    if buf != "":
+        lines = buf.split("\n")
+        status = int(lines[0])
+        print("Child process exited quickly with status %d" % status,
+              file=sys.stderr)
+        if len(lines) > 1:
+            print("Error propagated from the child process:", file=sys.stderr)
+            print("\n".join(lines[1:]), file=sys.stderr)
+        return status
+    else:
+        return 0
+
+
+def main(args):
+    parser = argparse.ArgumentParser(description="Run COMMAND as a daemon.",
+                                     epilog="Use -- to separate between args "
+                                            "to this command and to COMMAND")
+
+    parser.add_argument("--pidfile", metavar="PIDFILE",
+                        help="Write the process ID into PIDFILE",
+                        default="/var/run/runasdaemon.pid")
+    parser.add_argument("--socket-path", metavar="SOCKET_PATH",
+                        help="Create a communications socket at SOCKET_PATH",
+                        default="/var/run/runasdaemon.socket")
+    parser.add_argument("subcommand", metavar="COMMAND",
+                        help="The command to run")
+    parser.add_argument("subargs", metavar="ARGS", nargs="*",
+                        help="arguments to COMMAND")
+    args = parser.parse_args(args)
+
+    return parent_part([args.subcommand] + args.subargs, args.pidfile,
+                       args.socket_path)
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))
